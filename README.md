@@ -1,6 +1,6 @@
-# W Terminal
+# W·Terminal
 
-This template should help get you started developing with Vue 3 in Vite.
+简洁的网页版串口终端。
 
 ## Recommended IDE Setup
 

@@ -48,6 +48,7 @@ const serialCfgOpen = () => {
 }
 const serialCfgSet = () => {
     serialCfg.value.open = false
+    connect()
 }
 const serialCfgSetCancel = () => {
     serialCfg.value.open = false
@@ -153,7 +154,7 @@ onMounted(() => {
                 <a-modal v-model:open="serialCfg.open" title="串口配置" width="250px">
                     <template #footer>
                         <a-button @click="serialCfgSetCancel">取消</a-button>
-                        <a-button type="primary" @click="serialCfgSet">确认</a-button>
+                        <a-button type="primary" @click="serialCfgSet">确认并连接</a-button>
                     </template>
                     <a-form>
                         <a-form-item label="波特率">
@@ -211,9 +212,7 @@ onMounted(() => {
                 {{ serialPortInfo }}
             </div>
             <div class="termWrapper">
-                <div ref="xterm">
-
-                </div>
+                <div ref="xterm"></div>
             </div>
 
         </div>
@@ -260,11 +259,16 @@ body {
     margin-bottom: 10px;
 }
 
-.termWrapper {
+/* .termWrapper {
+    padding-left: 10px;
     background-color: black;
-}
+} */
 
 h1 {
     margin: 5px;
+}
+
+:deep(.xterm) {
+    padding: 10px
 }
 </style>
