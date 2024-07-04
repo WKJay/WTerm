@@ -158,9 +158,10 @@ onMounted(() => {
                     </template>
                     <a-form>
                         <a-form-item label="波特率">
-                            <a-select style="width: 120px" v-model:value="serialCfg.baudRate">
-                                <a-select-option v-for="br in baudRateList" :value="br">{{ br }}</a-select-option>
-                            </a-select>
+                            <div>
+                                <a-input-number id="baudrate" v-model:value="serialCfg.baudRate" :min="1"
+                                    style="width: 120px" />
+                            </div>
                         </a-form-item>
 
                         <a-form-item label="校验位">
