@@ -18,12 +18,20 @@ const serialCfg = ref({
     parity: 'none',
     flowControl: 'none',
 })
-const baudRateList = [2400, 4800, 9600, 19200, 38400, 57600, 115200]
+
+const termMode = ref(true)
+
+const traditionCfg = ref({
+    timeStamps: false,
+    hexRecv: false,
+    hexSend: false,
+    data: ''
+})
 const dataBitsList = [7, 8]
 const stopBitsList = [1, 2]
 const parityList = [{ label: '无校验', value: 'none' }, { label: '奇校验', value: 'odd' }, { label: '偶校验', value: 'even' }]
 const xterm = ref(null)
-const term = new Terminal({ rows: 40, cursorInactiveStyle: "outline", cursorStyle: "bar", cursorBlink: true, smoothScrollDuration: 100 })
+const term = new Terminal({ rows: 35, cursorInactiveStyle: "outline", cursorStyle: "bar", cursorBlink: true, smoothScrollDuration: 100 })
 
 let serialPort = ref(null)
 let serialReader = {}
@@ -52,6 +60,16 @@ const serialCfgSet = () => {
 }
 const serialCfgSetCancel = () => {
     serialCfg.value.open = false
+}
+
+const handleTermModeChange = () => {
+    if (termMode.value) {
+        //终端模式重置所有传统模式设置
+        traditionCfg.value.timeStamps = false
+        traditionCfg.value.hexRecv = false
+        traditionCfg.value.hexSend = false
+        traditionCfg.value.data = ''
+    }
 }
 
 const requsetSerial = async () => {
@@ -94,10 +112,38 @@ const disconnect = async () => {
 
 }
 
-const sendMsg = async (data) => {
-    if (!connected.value) return
+const handleTermClear = () => {
+    term?.write('\x1b[2J\x1b[H')
+}
+
+const traditionSend = () => {
+    if (traditionCfg.value.hexSend) {
+        sendMsg(traditionCfg.value.data, { hex: true })
+    } else {
+        sendMsg(traditionCfg.value.data)
+    }
+
+}
+
+const traditionClear = () => {
+    traditionCfg.value.data = ''
+}
+
+
+const sendMsg = async (data, opt) => {
+    if (!opt) opt = { hex: false }
+    if (!connected.value) {
+        message.error('串口未连接')
+        return
+    }
     const writer = serialPort.value.writable.getWriter()
-    let msg = new TextEncoder().encode(data)
+    let msg
+    if (opt.hex) {
+        let hexData = data.split(' ')
+        msg = new Uint8Array(hexData.map((v) => parseInt(v, 16)))
+    } else {
+        msg = new TextEncoder().encode(data)
+    }
     await writer.write(msg)
     writer.releaseLock()
 }
@@ -114,7 +160,22 @@ const readMsg = async () => {
                 serialPortInfoSet(SERIAL_PORT_SELECTED)
                 break
             }
-            term.write(new TextDecoder().decode(value))
+            let data = ''
+            if (traditionCfg.value.timeStamps) {
+                data = `[${new Date().toLocaleTimeString()}]:`
+            }
+            if (traditionCfg.value.hexRecv) {
+                data += Array.from(value).map(v => v.toString(16).padStart(2, '0')).join(' ')
+                data += ' '
+            } else {
+                data += new TextDecoder().decode(value)
+            }
+
+            if (traditionCfg.value.timeStamps) {
+                data += "\r\n"
+            }
+
+            term.write(data)
         }
     } catch (e) {
         console.error(e)
@@ -132,8 +193,17 @@ onMounted(() => {
     term.open(xterm.value)
     fitAddon.fit()
     term.onData(data => {
-        sendMsg(data)
+        if (termMode.value) {
+            sendMsg(data)
+        } else {
+            message.info("当前处于传统模式,请使用下方输入框发送数据")
+        }
     })
+
+    window.onresize = () => {
+        if (term && fitAddon)
+            fitAddon.fit()
+    }
 
     if (!('serial' in navigator)) {
         alert('当前浏览器不支持串口操作,请更换Edge或Chrome浏览器')
@@ -204,9 +274,15 @@ onMounted(() => {
             </div>
 
             <div class="toolBarItem">
-                <a-button @click="() => { term?.clear() }" type="dashed">清屏</a-button>
+                <a-button @click="handleTermClear" type="dashed">清屏</a-button>
             </div>
 
+            <div class="toolBarItem">
+                <a-tooltip title="切换终端模式或传统串口调试模式">
+                    <a-switch v-model:checked="termMode" checked-children="终端" un-checked-children="传统"
+                        @change="handleTermModeChange" />
+                </a-tooltip>
+            </div>
         </div>
         <div class="term">
             <div class="xtermHead">
@@ -215,12 +291,32 @@ onMounted(() => {
             <div class="termWrapper">
                 <div ref="xterm"></div>
             </div>
-
         </div>
+        <!-- 串口调试输入区 -->
+        <a-card>
+            <div v-if="!termMode">
+                <div class="tradModeTools">
+                    <a-checkbox v-model:checked="traditionCfg.hexRecv">hex 显示</a-checkbox>
+                    <a-checkbox v-model:checked="traditionCfg.hexSend">hex 发送</a-checkbox>
+                    <a-checkbox v-model:checked="traditionCfg.timeStamps">时间戳</a-checkbox>
+                </div>
+                <div class="tradModeInput">
+                    <a-textarea class="text-area" v-model:value="traditionCfg.data" />
+                    <a-button style=" height:auto" type="primary" @click="traditionSend"
+                        :disabled="traditionCfg.data.length == 0">发送</a-button>
+                    <a-button style=" height:auto" @click="traditionClear">清空</a-button>
+                </div>
+
+            </div>
+        </a-card>
     </div>
 </template>
 
 <style scoped>
+:deep(.ant-card-body) {
+    padding: 12px;
+}
+
 body {
     font-family: Arial, sans-serif
 }
@@ -264,6 +360,20 @@ body {
     padding-left: 10px;
     background-color: black;
 } */
+
+.tradModeTools {
+    margin-bottom: 10px;
+}
+
+.tradModeInput {
+    display: inline-flex;
+    width: 100%;
+    gap: 8px
+}
+
+.tradModeInput>.text-area {
+    flex: 1;
+}
 
 h1 {
     margin: 5px;
