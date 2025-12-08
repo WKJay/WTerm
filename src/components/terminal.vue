@@ -74,9 +74,22 @@ const handleTermModeChange = () => {
 
 const requsetSerial = async () => {
     try {
-        serialPort.value = await navigator.serial.requestPort()
+        let _serialPort = await navigator.serial.requestPort()
+        let info = serialPort.value?.getInfo()
+        let newInfo = _serialPort.getInfo()
+        if (newInfo == null || Object.keys(newInfo).length === 0) {
+            message.error('未获取到串口信息,请选择正确的串口')
+            return
+        }
+        if (info?.usbVendorId === newInfo.usbVendorId && info?.usbProductId === newInfo.usbProductId && connected.value) {
+            message.info('该串口已连接,为避免异常断开，如需修改参数请断开后再修改')
+            serialCfgSetCancel();
+            return
+        }
+        serialPort.value = _serialPort
         serialPortInfoSet(SERIAL_PORT_SELECTED)
     } catch (e) {
+        console.log(e)
         serialPortInfoSet(SERIAL_PORT_NOT_SELECTED)
         serialPort.value = null
     }
@@ -107,7 +120,6 @@ const connect = async () => {
 const disconnect = async () => {
     if (serialPort.value) {
         serialReader.cancel()
-        console.log(term.buffer)
     }
 
 }
@@ -179,7 +191,11 @@ const readMsg = async () => {
         }
     } catch (e) {
         console.error(e)
+        connected.value = false
         serialReader.releaseLock()
+        serialPort.value.close()
+        serialPort.value = null
+        message.error('串口连接丢失,请重新选择串口')
         serialPortInfoSet(SERIAL_PORT_SELECTED)
     }
 }
