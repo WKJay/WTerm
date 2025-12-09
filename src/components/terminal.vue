@@ -1,3 +1,4 @@
+serialPortInfo
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Terminal } from '@xterm/xterm'
@@ -34,6 +35,7 @@ const xterm = ref(null)
 const term = new Terminal({ rows: 35, cursorInactiveStyle: "outline", cursorStyle: "bar", cursorBlink: true, smoothScrollDuration: 100 })
 
 let serialPort = ref(null)
+let serialPortSelect = ref(null)
 let serialReader = {}
 
 const SERIAL_PORT_NOT_SELECTED = 0
@@ -75,46 +77,65 @@ const handleTermModeChange = () => {
 const requsetSerial = async () => {
     try {
         let _serialPort = await navigator.serial.requestPort()
-        let info = serialPort.value?.getInfo()
         let newInfo = _serialPort.getInfo()
         if (newInfo == null || Object.keys(newInfo).length === 0) {
             message.error('未获取到串口信息,请选择正确的串口')
             return
         }
-        if (info?.usbVendorId === newInfo.usbVendorId && info?.usbProductId === newInfo.usbProductId && connected.value) {
-            message.info('该串口已连接,为避免异常断开，如需修改参数请断开后再修改')
-            serialCfgSetCancel();
-            return
-        }
-        serialPort.value = _serialPort
-        serialPortInfoSet(SERIAL_PORT_SELECTED)
+        serialPortSelect.value = _serialPort
     } catch (e) {
         console.log(e)
-        serialPortInfoSet(SERIAL_PORT_NOT_SELECTED)
-        serialPort.value = null
+        // serialPortInfoSet(SERIAL_PORT_NOT_SELECTED)
+        // serialPort.value = null
     }
 }
 const connect = async () => {
     try {
-        if (serialPort.value == null) {
+        if (serialPortSelect.value == null && serialPort.value == null) {
             message.error('请先选择串口')
             serialCfgOpen()
             return
         }
-        await serialPort.value.open({
-            baudRate: serialCfg.value.baudRate,
-            dataBits: serialCfg.value.dataBits,
-            stopBits: serialCfg.value.stopBits,
-            parity: serialCfg.value.parity,
-            flowControl: serialCfg.value.flowControl,
-        })
-        connected.value = true
-        serialPortInfoSet(SERIAL_PORT_CONNECTED)
-        setTimeout(() => {
-            readMsg()
-        }, 10);
+
+        if (serialPortSelect.value) {
+            if (serialPort.value) {
+                await disconnect()
+            }
+            serialPort.value = serialPortSelect.value
+            serialPortSelect.value = null
+        }
+
+        setTimeout(async () => {
+            try {
+                await serialPort.value.open({
+                    baudRate: serialCfg.value.baudRate,
+                    dataBits: serialCfg.value.dataBits,
+                    stopBits: serialCfg.value.stopBits,
+                    parity: serialCfg.value.parity,
+                    flowControl: serialCfg.value.flowControl,
+                })
+                connected.value = true
+                serialPortInfoSet(SERIAL_PORT_CONNECTED)
+                setTimeout(() => {
+                    readMsg()
+                }, 10);
+            } catch (e) {
+                console.error(e)
+                if (e.toString().indexOf("The port is already open")) {
+                    message.info('该串口已连接,为避免异常断开，如需修改参数请断开后再修改')
+                    serialCfgSetCancel();
+                    return
+                } else {
+                    message.error('串口连接失败，由于 WEB 提供的接口有限制，如果设备被重新插入，请重新选择串口')
+                    serialPort.value = null
+                    serialPortInfoSet(SERIAL_PORT_NOT_SELECTED)
+                    serialCfgOpen()
+                }
+            }
+        }, 100);
     } catch (e) {
         console.error(e)
+
     }
 }
 const disconnect = async () => {
@@ -272,7 +293,7 @@ onMounted(() => {
                         <a-form-item>
                             <a-button type="primary" @click="requsetSerial" block>选择串口</a-button>
                             <div style="margin-top: 10px;">
-                                <a-alert v-if="serialPort == null" message="串口未选择" type="warning" />
+                                <a-alert v-if="serialPortSelect == null" message="串口未选择" type="warning" />
                                 <a-alert v-else message="串口已选择" type="success"> </a-alert>
                             </div>
                         </a-form-item>
